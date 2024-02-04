@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34330.188
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniversalLLMFunctionCaller", "UniversalLLMFunctionCaller\UniversalLLMFunctionCaller.csproj", "{660CAE90-1D47-4468-BE94-6D74C68B3E1F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniversalLLMFunctionCallerDemo", "UniversalLLMFunctionCallerDemo\UniversalLLMFunctionCallerDemo.csproj", "{C034FED1-65C8-4EF2-B0A9-54577C8E29CD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{660CAE90-1D47-4468-BE94-6D74C68B3E1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{660CAE90-1D47-4468-BE94-6D74C68B3E1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{660CAE90-1D47-4468-BE94-6D74C68B3E1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{660CAE90-1D47-4468-BE94-6D74C68B3E1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C034FED1-65C8-4EF2-B0A9-54577C8E29CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C034FED1-65C8-4EF2-B0A9-54577C8E29CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C034FED1-65C8-4EF2-B0A9-54577C8E29CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C034FED1-65C8-4EF2-B0A9-54577C8E29CD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0755AF7B-BBCD-4CEB-8E14-A93F21FC1AB3}
+	EndGlobalSection
+EndGlobal
