@@ -10,7 +10,7 @@ namespace UniversalLLMFunctionCallerDemo
         static async Task Main(string[] args)
         {
             IKernelBuilder builder = Kernel.CreateBuilder();
-            builder.AddMistralChatCompletion(Environment.GetEnvironmentVariable("mistral_key"), "mistral-medium");
+            builder.AddMistralChatCompletion(Environment.GetEnvironmentVariable("mistral_key"), "mistral-tiny");
             var kernel = builder.Build();
             kernel.ImportPluginFromType<TimePlugin>("Time");
             kernel.ImportPluginFromType<MathPlugin>("Math");
