@@ -1,4 +1,5 @@
-﻿using Microsoft.SemanticKernel;
+﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.TextGeneration;
 using System.Text;
@@ -32,7 +33,7 @@ namespace JC.SemanticKernel.Planners.UniversalLLMFunctionCaller
             }
 
             string extractAskFromHistoryPrompt = $@"Look at this dialog between a user and an assistant. 
-I need to know what the user wants the assistant to do.
+Summarize what the user wants the assistant to do with their last message
 ##Start of Conversation##
 {sb.ToString()}
 ##End of Conversation##";
@@ -52,23 +53,25 @@ I need to know what the user wants the assistant to do.
             FunctionCall nextFunctionCall = new FunctionCall { Name = "Start" };
             int iterations = 0;
             ChatHistory history = new ChatHistory();
-            history.AddSystemMessage(GetTap1SystemMessage(pluginsAsTextPrompt3000));
+       
             history.Add(new ChatMessageContent(AuthorRole.User, "New task: Start my spaceship"));
             history.Add(new ChatMessageContent(AuthorRole.Assistant, "GetMySpaceshipName()"));
             history.Add(new ChatMessageContent(AuthorRole.User, "MSS3000"));
-            history.Add(new ChatMessageContent(AuthorRole.Assistant, "StartSpaceship(shipname: 'MSS3000')"));
+            history.Add(new ChatMessageContent(AuthorRole.Assistant, "StartSpaceship(ship_name: \"MSS3000\")"));
             history.Add(new ChatMessageContent(AuthorRole.User, "Ship started")); 
-            history.Add(new ChatMessageContent(AuthorRole.Assistant, "Finished(finalmessage: 'The ship was started')"));
+            history.Add(new ChatMessageContent(AuthorRole.Assistant, "Finished(finalmessage: \"The ship with the name of 'MSS3000' was started\")"));
             history.Add(new ChatMessageContent(AuthorRole.User, $"New task: {ask}"));
-
+            
             while (iterations < 10 && nextFunctionCall.Name != "Finished")
             {
                 for (int iRootRetry = 0; iRootRetry < 2; iRootRetry++)
                 {
-                    nextFunctionCall = await GetNextFunctionToCallAsync(history, pluginsAsTextPrompt3000);
+                    //nextFunctionCall = await GetNextFunctionToCallDoubleTappedAsync(history, pluginsAsTextPrompt3000);
+                   
+                        nextFunctionCall = await GetNextFunctionToCallDirectLoopAsync(history, pluginsAsTextPrompt3000);
                     if (nextFunctionCall != null) break;
                 }
-                if (nextFunctionCall == null) throw new Exception("The LLM is not compatible with this approach.");
+             if(nextFunctionCall == null) throw new Exception("The LLM is not compatible with this approach.");
 
                 string nextFunctionCallText = GetCallAsTextPrompt3000(nextFunctionCall);
                 history.AddAssistantMessage(nextFunctionCallText);
@@ -83,6 +86,35 @@ I need to know what the user wants the assistant to do.
                 return finalMessage;
             }
             throw new Exception("LLM could not finish workflow within 10 steps. consider increasing the number of steps"); 
+        }
+
+        private async Task<FunctionCall?> GetNextFunctionToCallDirectLoopAsync(ChatHistory history, string pluginsAsTextPrompt3000)
+        {
+            var innerHistory = new ChatHistory(history.ToArray().ToList()); //hard copy
+            if (innerHistory[0].Role != AuthorRole.System)
+            {
+                innerHistory.Insert(0, new ChatMessageContent(AuthorRole.System, GetLoopSystemMessage(pluginsAsTextPrompt3000)));
+            }
+
+            for (int iRetry = 0; iRetry < 5; iRetry++)
+            {
+                var llmReply = await _chatCompletion.GetChatMessageContentAsync(innerHistory);
+              //  Console.WriteLine(llmReply.Content);
+                innerHistory.AddAssistantMessage(llmReply.Content);
+
+                try
+                {
+                    FunctionCall functionCall = ParseTextPrompt3000Call(llmReply);
+                    ValidateFunctionWithKernel(functionCall);
+
+                    return functionCall;
+                }
+                catch (Exception ex)
+                {
+                    innerHistory.AddUserMessage($"Error: '{ex.Message}'. Try again. Do not apologise. Do not explain anything. just follow the rules from earlier");
+                }
+            }
+            return null;
         }
 
         private string GetTap1SystemMessage(string pluginsAsTextPrompt3000)
@@ -111,13 +143,43 @@ if A wasnt called allready, call A() first. The result will be used in B in a la
 If you break any of those rules, a kitten dies. 
 What function should the user execute next on the computer? Explain your reasoning step by step.
 ";
-
             return systemPrompt;
         }
+        private string GetLoopSystemMessage(string pluginsAsTextPrompt3000)
+            {
+                string systemPrompt = $@"You are a computer system. You can only speak TextPrompt3000 to make the user call functions, and the user will behave
+as a different computer system that answers those functions.
+Below, you are provided a goal that needs to be reached, as well as a list of functions that the user could use.
+You need to find out what the next step for the user is to reach the goal and recommend a TextPrompt3000 function call. 
+You are also provided a list of functions that are in TextPrompt3000 Schema Format.
+The TextPrompt3000 Format is defined like this:
+{GetTextPrompt300Explanation()}
+##available functions##
+{pluginsAsTextPrompt3000}
+##end functions##
 
-        private async Task<FunctionCall> GetNextFunctionToCallAsync(ChatHistory tap1history, string pluginsAsTextPrompt3000)
+The following rules are very important:
+1) you can only recommend one function and the parameters, not multiple functions
+2) You can only recommend a function that is in the list of available functions
+3) You need to give all parameters for the function. Do NOT escape special characters in the name of functions or the names of parameters (dont do aaa\_bbb, just stick to aaa_bbb)!
+4) Given the history, the function you recommend needs to be important to get closer towards the goal
+5) Do not wrap functions into each other. Stick to the list of functions, this is not a math problem. Do not use placeholders.
+We only need one function, the next one needed. For example, if function A() needs to be used as parameter in function B(), do NOT do B(A()). Instead,
+if A wasnt called allready, call A() first. The result will be used in B in a later iteration.
+6) Do not recommend a function that was recently called. Use the output instead. Do not use Placeholders or Functions as parameters for other functions
+7) Only write a Function Call, do not explain why, do not provide a reasoning. You are limited to writing a function call only!
+8) When all  necessary functions are called and the result was presented by the computer system, call the Finished function and present the result
+
+If you break any of those rules, a kitten dies. 
+";
+                return systemPrompt;
+        }
+
+        private async Task<FunctionCall> GetNextFunctionToCallDoubleTappedAsync(ChatHistory tap1history, string pluginsAsTextPrompt3000)
         {
-            
+            if (tap1history[0].Role != AuthorRole.System) {
+                tap1history.Insert(0, new ChatMessageContent(AuthorRole.System, GetTap1SystemMessage(pluginsAsTextPrompt3000)));
+            }
 
             //we are doing multi-tapping here. First get an elaborate answer, and then press that answer into a usable format
             var tap1Answer = await _chatCompletion.GetChatMessageContentAsync(tap1history);
@@ -147,7 +209,7 @@ If you do not do this, a very cute kitten dies.";
                 tap2History.AddAssistantMessage(tap2Answer[0].Content);
             try
                 {
-                    FunctionCall functionCall = ParseTextPrompt3000Call(tap2Answer);
+                    FunctionCall functionCall = ParseTextPrompt3000Call(tap2Answer[0]);
                     ValidateFunctionWithKernel(functionCall);
 
                     return functionCall;
@@ -193,16 +255,18 @@ If you do not do this, a very cute kitten dies.";
 
 
 
-        private FunctionCall ParseTextPrompt3000Call(IReadOnlyList<ChatMessageContent> tap2Answer)
+        private FunctionCall ParseTextPrompt3000Call(ChatMessageContent possibleFunctionCallResult)
         {
             // Get the content of the first ChatMessageContent
-            string content = tap2Answer[0].Content;
+            string content = possibleFunctionCallResult.Content;
 
             // Split the content into function name and parameters
             int openParenIndex = content.IndexOf('(');
             int closeParenIndex = content.IndexOf(')');
             string functionName = content.Substring(0, openParenIndex);
             string parametersContent = content.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1);
+
+            parametersContent = RemoveBackslashesOutsideQuotes(parametersContent);
 
             // Create a new FunctionCall
             FunctionCall functionCall = new FunctionCall();
@@ -213,7 +277,7 @@ If you do not do this, a very cute kitten dies.";
             if (!string.IsNullOrWhiteSpace(parametersContent))
             {
                 // Use a regular expression to match the parameters
-                var matches = Regex.Matches(parametersContent, @"(\w+)\s*:\s*('([^']*)'|(\d+(\.\d+)?))");
+                var matches = Regex.Matches(parametersContent, @"(\w+)\s*:\s*(""([^""]*)""|(\d+(\.\d+)?))");
 
                 // Parse each parameter
                 foreach (Match match in matches)
@@ -221,6 +285,7 @@ If you do not do this, a very cute kitten dies.";
                     // Get the parameter name and value
                     string parameterName = match.Groups[1].Value;
                     object parameterValue = match.Groups[3].Success ? match.Groups[3].Value : double.Parse(match.Groups[4].Value); // You might want to convert this to the appropriate type
+                  
 
                     // Create a new FunctionCallParameter and add it to the FunctionCall
                     FunctionCallParameter functionCallParameter = new FunctionCallParameter();
@@ -234,6 +299,26 @@ If you do not do this, a very cute kitten dies.";
         }
 
 
+        private string RemoveBackslashesOutsideQuotes(string input)
+        {
+            StringBuilder result = new StringBuilder();
+            bool insideQuotes = false;
+
+            foreach (char c in input)
+            {
+                if (c == '"')
+                {
+                    insideQuotes = !insideQuotes;
+                }
+
+                if (c != '\\' || insideQuotes)
+                {
+                    result.Append(c);
+                }
+            }
+
+            return result.ToString();
+        }
 
 
 
@@ -245,13 +330,13 @@ FunctionName(parameter: value)
 ##
 In TextPrompt3000, there are also schemas. 
 ##Example of TextPrompt3000 Schema##
-FunctionName(datatype1 parametername1:'parameter1 description',datatype2 parametername2:'parameter2 description')--Description of the function
+FunctionName(datatype1 parametername1:""parameter1 description"",datatype2 parametername2:""parameter2 description"")--Description of the function
 ##
 There can be no parameters, one, or many parameters.
 For example, a Schema looking like this:
-StartSpaceship(string shipName:'The name of the starting ship', int speed: 100)--Starts a specific spaceship with a specific speed
+StartSpaceship(string shipName:""The name of the starting ship"", int speed: 100)--Starts a specific spaceship with a specific speed
 would be called like this:
-StartSpaceship(shipName: 'Enterprise', speed: 99999)
+StartSpaceship(shipName: ""Enterprise"", speed: 99999)
 ";
         }
 
@@ -265,8 +350,9 @@ StartSpaceship(shipName: 'Enterprise', speed: 99999)
                 if (i > 0)
                     sb.Append(", ");
                 sb.Append(nextFunctionCall.Parameters[i].Name);
-                sb.Append(": ");
+                sb.Append(": \"");
                 sb.Append(nextFunctionCall.Parameters[i].Value.ToString());
+                sb.Append("\"");
             }
             sb.Append(")");
             return sb.ToString();
@@ -275,7 +361,12 @@ StartSpaceship(shipName: 'Enterprise', speed: 99999)
 
         private async Task<string> InvokePluginAsync(FunctionCall functionCall)
         {
-           
+           List<string> args = new List<string>();
+            foreach(var paraam in functionCall.Parameters)
+            {
+                args.Add($"{paraam.Name} : {paraam.Value}");
+            }
+            Console.WriteLine($">>invoking {functionCall.Name} with parameters {string.Join(",", args)}");
             // Iterate over each plugin in the kernel
             foreach (var plugin in _kernel.Plugins)
             {
@@ -295,6 +386,7 @@ StartSpaceship(shipName: 'Enterprise', speed: 99999)
                     // Invoke the function
                     var result = await function.InvokeAsync(_kernel,context);
 
+                    Console.WriteLine($">>Result: {result.ToString()}");
                     return result.ToString();
                 }
             }
@@ -320,9 +412,9 @@ StartSpaceship(shipName: 'Enterprise', speed: 99999)
                         sb.Append(function.Parameters[i].ParameterType.Name);
                         sb.Append(" ");
                         sb.Append(function.Parameters[i].Name);
-                        sb.Append(": '");
+                        sb.Append(": \"");
                         sb.Append(function.Parameters[i].Description);
-                        sb.Append("'");
+                        sb.Append("\"");
                     }
                     sb.Append(")");
                     sb.Append("--");

@@ -25,7 +25,7 @@ namespace JC.SemanticKernel.Planners.UniversalLLMFunctionCaller
         }
         [KernelFunction, Description("Starts a Spaceship")]
         public void StartSpaceship(
-       [Description("The name of the spaceship to start")] string shipname
+       [Description("The name of the spaceship to start")] string ship_name
      )
         {
             //no actual implementation, for internal routing only
