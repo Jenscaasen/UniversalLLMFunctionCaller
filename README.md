@@ -17,9 +17,25 @@ Usage example with Mistral:
  Console.WriteLine(result);
 ```
 
-This is both faster and more reliable compared to the Handlebar Planner, that offers a similar functionality out of the box for non-OpenAI LLMs.
+This works with a single ask, but also supports a ChatHistory:
+
+```C#
+[...]
+UniversalLLMFunctionCaller planner = new(kernel);
+
+ChatHistory history = new ChatHistory();
+history.AddUserMessage("What is the capital of france?");
+history.AddAssistantMessage("Paris");
+history.AddUserMessage("And of Denmark?");
+ result = await planner.RunAsync(history);
+```
+Here, the plugin reads the context of the ChatHistory to understand what the actual question is ("What is the capital of Denmark?") instead of just using an out-of-context message ("And of Denmark?")
+
+According to internal tests, this Planner is both faster and more reliable compared to the Handlebar Planner, that offers a similar functionality out of the box for non-OpenAI LLMs.
 Tested with Mistral (nuget: JC.SemanticKernel.Connectors.Mistral). More testing with more use cases and more LLMs needed. Feel free to create issues and do pull requests.
 
+The Plugins in the Demo and Test Project are taken from the Main Semantic Kernel Repo: https://github.com/microsoft/semantic-kernel 
+I do not claim ownership or copyright on them.
 
 ## FAQ
 
