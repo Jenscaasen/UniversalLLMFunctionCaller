@@ -4,6 +4,15 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>JC.SemanticKernel.Planners.UniversalLLMFunctionCaller</PackageId>
+    <Title>JC.SemanticKernel.Planners.UniversalLLMFunctionCaller</Title>
+    <Version>0.1.0</Version>
+    <Authors>Jens Caasen</Authors>
+    <Copyright>Jens Caasen</Copyright>
+    <Description>A planner that integrates into Semantic Kernel to enable function calling on all Chat based LLMs (Mistral, Bard, Claude, LLama etc)</Description>
+    <PackageProjectUrl>https://github.com/Jenscaasen/UniversalLLMFunctionCaller</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Jenscaasen/UniversalLLMFunctionCaller</RepositoryUrl>
+    <PackageTags>llm, semantic kernel, planner, function calling, ai</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

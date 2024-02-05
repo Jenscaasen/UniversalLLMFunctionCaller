@@ -4,6 +4,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.TextGeneration;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace JC.SemanticKernel.Planners.UniversalLLMFunctionCaller
 {
@@ -43,67 +44,87 @@ Summarize what the user wants the assistant to do with their last message
             return ask;
         }
 
-        public async Task<string> RunAsync(string ask)
+        public async Task<string> RunAsync(string task)
         {
+            // Initialize plugins
             var plugins = _kernel.Plugins;
-         var internalPlugin =   _kernel.Plugins.AddFromType<UniversalLLMFunctionCallerInternalFunctions>();
+            var internalPlugin = _kernel.Plugins.AddFromType<UniversalLLMFunctionCallerInternalFunctions>();
 
-            string pluginsAsTextPrompt3000 = GetTemplatesAsTextPrompt3000(plugins);
-           
+            // Convert plugins to text
+            string pluginsAsText = GetTemplatesAsTextPrompt3000(plugins);
+
+            // Initialize function call and chat history
             FunctionCall nextFunctionCall = new FunctionCall { Name = "Start" };
-            int iterations = 0;
-            ChatHistory history = new ChatHistory();
-       
-            history.Add(new ChatMessageContent(AuthorRole.User, "New task: Start my spaceship"));
-            history.Add(new ChatMessageContent(AuthorRole.Assistant, "GetMySpaceshipName()"));
-            history.Add(new ChatMessageContent(AuthorRole.User, "MSS3000"));
-            history.Add(new ChatMessageContent(AuthorRole.Assistant, "StartSpaceship(ship_name: \"MSS3000\")"));
-            history.Add(new ChatMessageContent(AuthorRole.User, "Ship started")); 
-            history.Add(new ChatMessageContent(AuthorRole.Assistant, "Finished(finalmessage: \"The ship with the name of 'MSS3000' was started\")"));
-            history.Add(new ChatMessageContent(AuthorRole.User, $"New task: {ask}"));
-            
-            while (iterations < 10 && nextFunctionCall.Name != "Finished")
-            {
-                for (int iRootRetry = 0; iRootRetry < 2; iRootRetry++)
-                {
-                    //nextFunctionCall = await GetNextFunctionToCallDoubleTappedAsync(history, pluginsAsTextPrompt3000);
-                   
-                        nextFunctionCall = await GetNextFunctionToCallDirectLoopAsync(history, pluginsAsTextPrompt3000);
-                    if (nextFunctionCall != null) break;
-                }
-             if(nextFunctionCall == null) throw new Exception("The LLM is not compatible with this approach.");
+            ChatHistory chatHistory = InitializeChatHistory(task);
 
+            // Add new task to chat history
+            chatHistory.Add(new ChatMessageContent(AuthorRole.User, $"New task: {task}"));
+
+            // Process function calls
+            for (int iteration = 0; iteration < 10 && nextFunctionCall.Name != "Finished"; iteration++)
+            {
+                nextFunctionCall = await GetNextFunctionCallAsync(chatHistory, pluginsAsText);
+                if (nextFunctionCall == null) throw new Exception("The LLM is not compatible with this approach.");
+
+                // Add function call to chat history
                 string nextFunctionCallText = GetCallAsTextPrompt3000(nextFunctionCall);
-                history.AddAssistantMessage(nextFunctionCallText);
-              string pluginResponse = await InvokePluginAsync(nextFunctionCall);
-                history.AddUserMessage(pluginResponse);
+                chatHistory.AddAssistantMessage(nextFunctionCallText);
+
+                // Invoke plugin and add response to chat history
+                string pluginResponse = await InvokePluginAsync(nextFunctionCall);
+                chatHistory.AddUserMessage(pluginResponse);
             }
 
+            // Remove internal plugin
             _kernel.Plugins.Remove(internalPlugin);
-            if(nextFunctionCall.Name == "Finished")
+
+            // Check if task was completed successfully
+            if (nextFunctionCall.Name == "Finished")
             {
                 string finalMessage = nextFunctionCall.Parameters[0].Value.ToString();
                 return finalMessage;
             }
-            throw new Exception("LLM could not finish workflow within 10 steps. consider increasing the number of steps"); 
+
+            throw new Exception("LLM could not finish workflow within 10 steps. Consider increasing the number of steps.");
         }
 
-        private async Task<FunctionCall?> GetNextFunctionToCallDirectLoopAsync(ChatHistory history, string pluginsAsTextPrompt3000)
+        private ChatHistory InitializeChatHistory(string ask)
         {
-            var innerHistory = new ChatHistory(history.ToArray().ToList()); //hard copy
-            if (innerHistory[0].Role != AuthorRole.System)
+            ChatHistory history = new ChatHistory();
+
+            history.Add(new ChatMessageContent(AuthorRole.User, "New task: Start my spaceship"));
+            history.Add(new ChatMessageContent(AuthorRole.Assistant, "GetMySpaceshipName()"));
+            history.Add(new ChatMessageContent(AuthorRole.User, "MSS3000"));
+            history.Add(new ChatMessageContent(AuthorRole.Assistant, "StartSpaceship(ship_name: \"MSS3000\")"));
+            history.Add(new ChatMessageContent(AuthorRole.User, "Ship started"));
+            history.Add(new ChatMessageContent(AuthorRole.Assistant, "Finished(finalmessage: \"The ship with the name of 'MSS3000' was started\")"));
+            history.Add(new ChatMessageContent(AuthorRole.User, $"New task: {ask}"));
+
+            return history;
+        }
+
+        private async Task<FunctionCall?> GetNextFunctionCallAsync(ChatHistory history, string pluginsAsText)
+        {
+            // Create a copy of the chat history
+            var copiedHistory = new ChatHistory(history.ToArray().ToList());
+
+            // Add system message to history if not present
+            if (copiedHistory[0].Role != AuthorRole.System)
             {
-                innerHistory.Insert(0, new ChatMessageContent(AuthorRole.System, GetLoopSystemMessage(pluginsAsTextPrompt3000)));
+                string systemMessage = GetLoopSystemMessage(pluginsAsText);
+                copiedHistory.Insert(0, new ChatMessageContent(AuthorRole.System, systemMessage));
             }
 
-            for (int iRetry = 0; iRetry < 5; iRetry++)
+            // Try to get the next function call
+            for (int retryCount = 0; retryCount < 5; retryCount++)
             {
-                var llmReply = await _chatCompletion.GetChatMessageContentAsync(innerHistory);
-              //  Console.WriteLine(llmReply.Content);
-                innerHistory.AddAssistantMessage(llmReply.Content);
+                // Get LLM reply and add it to the history
+                var llmReply = await _chatCompletion.GetChatMessageContentAsync(copiedHistory);
+                copiedHistory.AddAssistantMessage(llmReply.Content);
 
                 try
                 {
+                    // Parse and validate the function call
                     FunctionCall functionCall = ParseTextPrompt3000Call(llmReply);
                     ValidateFunctionWithKernel(functionCall);
 
@@ -111,11 +132,15 @@ Summarize what the user wants the assistant to do with their last message
                 }
                 catch (Exception ex)
                 {
-                    innerHistory.AddUserMessage($"Error: '{ex.Message}'. Try again. Do not apologise. Do not explain anything. just follow the rules from earlier");
+                    // Add error message to history and continue
+                    string errorMessage = $"Error: '{ex.Message}'. Please try again without apologizing or explaining. Just follow the previous rules.";
+                    copiedHistory.AddUserMessage(errorMessage);
                 }
             }
+
             return null;
         }
+
 
         private string GetTap1SystemMessage(string pluginsAsTextPrompt3000)
         {
