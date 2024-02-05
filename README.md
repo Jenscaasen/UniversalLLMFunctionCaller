@@ -62,3 +62,11 @@ Please create an issue on Github and share as many information as possible: what
 No. For Mistral, the medium and small models work. The Tiny Model seems to lack a basic understanding of planning, and does not move forward in the process. An undefined minimum of cleverness needs to reside in the LLM for this to work
 
 </details>
+
+### This isn't a planner, it doesn't plan anything!
+<details>
+<summary>Click to expand!</summary>
+
+True. Planner is the closest concept available in Semantic Kernel. There is no planning step to enable the real-time output of plugins to influence the calling of the next plugins.
+
+</details>
