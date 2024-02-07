@@ -1,4 +1,5 @@
 # UniversalLLMFunctionCaller
+![.NET build](https://github.com/Jenscaasen/UniversalLLMFunctionCaller/actions/workflows/dotnet.yml/badge.svg)
 
 The UniversalLLMFunctionCaller automatically invokes functions until a given goal or workflow is done. This works without the LLM natively supporting FunctionCalling (OpenAI), which therefore enables other LLM providers as Mistral, Anthropic, Meta, Google and others to also use function calling.
 Usage example with Mistral:
