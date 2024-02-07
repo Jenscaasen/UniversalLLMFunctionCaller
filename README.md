@@ -13,7 +13,7 @@ Usage example with Mistral:
  UniversalLLMFunctionCaller planner = new(kernel);
  string ask = "What is the current hour number, plus 5?";
  Console.WriteLine(ask);
- string result = await planner.RunAsync("What is the current hour number, plus 5?");
+ string result = await planner.RunAsync(ask);
  Console.WriteLine(result);
 ```
 
