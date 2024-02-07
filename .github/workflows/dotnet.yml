@@ -26,7 +26,3 @@ jobs:
       env:
         mistral_key: ${{ secrets.MISTRAL_KEY }}
         bing_key: ${{ secrets.BING_KEY }}
-    - name: Pack
-      run: dotnet pack --configuration Release --no-build -o out
-    - name: Publish
-      run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
